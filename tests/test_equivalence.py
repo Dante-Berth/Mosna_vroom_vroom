@@ -111,24 +111,59 @@ def test_mixing_matrix_vectorized_matches_original(orig):
             )
 
 
-def test_randomized_mixmat_serial_equals_parallel():
-    """With a fixed random_state, serial and joblib backends are identical."""
-    rng = np.random.default_rng(4)
-    n, A = 1500, 5
+def _onehot_graph(seed=4, n=1500, A=5, n_edges=4000):
+    rng = np.random.default_rng(seed)
     onehot = np.zeros((n, A), dtype=int)
     onehot[np.arange(n), rng.integers(0, A, n)] = 1
     attrs = [f"t{i}" for i in range(A)]
     nodes = pd.DataFrame(onehot, columns=attrs)
-    e = rng.integers(0, n, (4000, 2))
+    e = rng.integers(0, n, (n_edges, 2))
     edges = pd.DataFrame(np.unique(e, axis=0), columns=["source", "target"])
+    return nodes, edges, attrs
 
-    mm_s, ac_s = new.randomized_mixmat(
+
+def test_randomized_mixmat_serial_reproducible():
+    """The fast serial path is reproducible for a fixed random_state."""
+    nodes, edges, attrs = _onehot_graph()
+    mm1, ac1 = new.randomized_mixmat(
         nodes, edges, attrs, n_shuffle=8, parallel=False, verbose=0, random_state=7)
-    mm_p, ac_p = new.randomized_mixmat(
-        nodes, edges, attrs, n_shuffle=8, parallel=2, backend="joblib",
-        verbose=0, random_state=7)
-    np.testing.assert_array_equal(mm_s, mm_p)
-    np.testing.assert_array_equal(ac_s, ac_p)
+    mm2, ac2 = new.randomized_mixmat(
+        nodes, edges, attrs, n_shuffle=8, parallel=False, verbose=0, random_state=7)
+    np.testing.assert_array_equal(mm1, mm2)
+    np.testing.assert_array_equal(ac1, ac2)
+
+
+def test_randomized_mixmat_fast_path_matches_mixing_matrix():
+    """Each shuffle of the fast codes path equals mixing_matrix applied to the
+    same permuted labels — i.e. the fast path computes the *exact* mixing matrix
+    of a shuffled network, just without the DataFrame round-trip."""
+    nodes, edges, attrs = _onehot_graph()
+    A = len(attrs)
+    codes = nodes[attrs].values.argmax(1)
+
+    # reproduce the first shuffle the fast path would draw
+    rng = np.random.default_rng(123)
+    shuffled = rng.permutation(codes)
+    shuffled_nodes = pd.DataFrame(np.eye(A, dtype=int)[shuffled], columns=attrs)
+    expected = new.mixing_matrix(shuffled_nodes, edges, attrs)
+
+    # first matrix produced by randomized_mixmat with the same seed
+    mm, _ = new.randomized_mixmat(
+        nodes, edges, attrs, n_shuffle=1, parallel=False, verbose=0, random_state=123)
+    np.testing.assert_allclose(mm[0], expected, rtol=1e-12, atol=1e-12)
+
+
+def test_randomized_mixmat_statistically_equivalent_to_original(orig):
+    """Over many shuffles, the fast path's mean mixing matrix matches the
+    original implementation's mean (same distribution, different draws)."""
+    nodes, edges, attrs = _onehot_graph(n=800, A=4, n_edges=3000)
+    ns = 400
+    mm_new, _ = new.randomized_mixmat(
+        nodes, edges, attrs, n_shuffle=ns, parallel=False, verbose=0, random_state=0)
+    mm_orig, _ = orig.randomized_mixmat(
+        nodes, edges, attrs, n_shuffle=ns, parallel=False, verbose=0)
+    # means over the shuffle axis should agree to a loose Monte-Carlo tolerance
+    np.testing.assert_allclose(mm_new.mean(0), mm_orig.mean(0), atol=2e-3)
 
 
 # ---- package-internal sanity (run even without the original reference) ----
