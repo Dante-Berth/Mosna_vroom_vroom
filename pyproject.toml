@@ -56,6 +56,9 @@ viz = ["napari"]
 gpu = ["cupy", "cudf", "cugraph", "cuml"]
 benchmark = ["polars", "pyarrow", "pandas"]
 dev = ["pytest", "ruff", "ipykernel"]
+# Docs build deps. Kept light: heavy scientific backends are mocked in
+# docs/source/conf.py (autodoc_mock_imports), so RTD does not need them.
+docs = ["sphinx", "sphinx-rtd-theme", "nbsphinx", "myst-parser"]
 
 [project.urls]
 Homepage = "https://github.com/AlexCoul/mosna"

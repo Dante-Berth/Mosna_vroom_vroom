@@ -1,0 +1,27 @@
+# Read the Docs configuration for MOSNA (vroom vroom edition)
+# https://docs.readthedocs.io/en/stable/config-file/v2.html
+version: 2
+
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.10"
+
+sphinx:
+  configuration: docs/source/conf.py
+  # Treat warnings as errors so broken autodoc/cross-refs fail the build.
+  fail_on_warning: true
+
+formats:
+  - pdf
+  - epub
+
+python:
+  install:
+    - requirements: docs/requirements.txt
+    # Install the package itself so autodoc can import mosna and read docstrings.
+    # `docs` extra pulls only the light deps autodoc needs (see pyproject).
+    - method: pip
+      path: .
+      extra_requirements:
+        - docs
