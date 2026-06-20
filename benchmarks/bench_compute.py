@@ -79,6 +79,17 @@ def timeit(fn, repeats):
     return best, out
 
 
+def safe_timeit(fn, repeats):
+    """Like timeit but tolerant of the *original* baseline failing (e.g. the
+    upstream code uses np.asmatrix + float(), which raises on NumPy >= 2.3).
+    Returns (None, None) on error so the benchmark still reports our timing."""
+    try:
+        return timeit(fn, repeats)
+    except Exception as exc:  # noqa: BLE001 - baseline is third-party, may break
+        print(f"   [original baseline unavailable: {type(exc).__name__}: {exc}]")
+        return None, None
+
+
 def report(name, t_orig, t_new, identical):
     flag = "OK" if identical else "MISMATCH!"
     if t_orig is None:
@@ -121,8 +132,9 @@ def main():
     t_orig = None
     identical = True
     if orig is not None:
-        t_orig, mm_orig = timeit(lambda: orig.mixing_matrix(nodes, edges, attrs), r)
-        identical = np.array_equal(mm_orig, mm_new)
+        t_orig, mm_orig = safe_timeit(lambda: orig.mixing_matrix(nodes, edges, attrs), r)
+        if mm_orig is not None:
+            identical = np.array_equal(mm_orig, mm_new)
     report("1. mixing_matrix", t_orig, t_new, identical)
 
     # 2. randomized_mixmat (serial)
@@ -133,7 +145,7 @@ def main():
     t_orig2 = None
     ident2 = True  # different RNG draws by design; checked statistically in tests
     if orig is not None:
-        t_orig2, _ = timeit(lambda: orig.randomized_mixmat(
+        t_orig2, _ = safe_timeit(lambda: orig.randomized_mixmat(
             nodes, edges, attrs, n_shuffle=ns, parallel=False, verbose=0), 1)
     report(f"2. randomized_mixmat(x{ns})", t_orig2, t_new2, ident2)
 
@@ -146,10 +158,11 @@ def main():
     t_orig3 = None
     ident3 = True
     if orig is not None:
-        t_orig3, agg_orig = timeit(lambda: orig.aggregate_k_neighbors(
+        t_orig3, agg_orig = safe_timeit(lambda: orig.aggregate_k_neighbors(
             X, es, order=1, var_names=marker_cols), 1)
-        ident3 = np.allclose(agg_orig.values, agg_new[agg_orig.columns].values,
-                             rtol=1e-8, atol=1e-8)
+        if agg_orig is not None:
+            ident3 = np.allclose(agg_orig.values, agg_new[agg_orig.columns].values,
+                                 rtol=1e-8, atol=1e-8)
     report(f"3. aggregate_k_neighbors({sub:,})", t_orig3, t_new3, ident3)
 
     print("-" * 80)

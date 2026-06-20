@@ -163,11 +163,15 @@ def attribute_ac(M):
        Physical Review E, 67 026126, 2003
     """
     
+    M = np.asarray(M, dtype=float)
     if M.sum() != 1.0:
-        M = M / float(M.sum())
-    M = np.asmatrix(M)
-    s = (M * M).sum()
-    t = M.trace()
+        M = M / M.sum()
+    # NetworkX Eq.(2): (trace(e) - sum(e^2)) / (1 - sum(e^2)), where the sum is
+    # over the matrix product e @ e (the original used np.asmatrix, whose `*`
+    # is matrix multiplication). Use ndarrays + `@`: np.asmatrix is deprecated
+    # and float() on the resulting 1x1 matrix raises TypeError on NumPy >= 2.3.
+    s = (M @ M).sum()
+    t = np.trace(M)
     r = (t - s) / (1 - s)
     return float(r)
 

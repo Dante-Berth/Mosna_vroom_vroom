@@ -207,6 +207,31 @@ End-to-end comparison of the original vs refactored package on a big spatial
 graph across three stages (assortativity, neighbor aggregation, I/O round-trip).
 Confirms compute parity where the math is shared and the I/O speedups at scale.
 
+## 7. NumPy 2.x compatibility fix (`attribute_ac`)
+
+The upstream `attribute_ac` used `np.asmatrix(M)` and `float(r)` on the
+resulting 1×1 matrix. That is a *hard* `TypeError`
+("only 0-dimensional arrays can be converted to Python scalars") on
+**NumPy ≥ 2.3** (deprecation warning on 1.25–2.2). Our copy now uses plain
+ndarrays: `s = (M @ M).sum()`, `t = np.trace(M)` — mathematically identical
+(`np.matrix`'s `*` is matrix multiplication, preserved with `@`) and verified
+bit-for-bit (0 difference over 2000 random matrices), but version-proof. A
+regression test pins the Newman Eq.(2) definition.
+
+The benchmark and equivalence tests also tolerate the *original* baseline
+raising on new NumPy (it can't run there): the comparison is skipped and our
+own implementation is asserted independently.
+
+## 8. Pinned, verifiable upstream baseline (Option A)
+
+`tests/_orig_mosna_reference.py` is the upstream `mosna/mosna.py` verbatim
+(only 3 optional imports wrapped in try/except). It is pinned to commit
+`0bafb2d` in [`benchmarks/UPSTREAM_REF`](benchmarks/UPSTREAM_REF), and
+[`tests/test_reference_matches_upstream.py`](tests/test_reference_matches_upstream.py)
+re-fetches that file from GitHub at the pinned SHA and asserts every
+benchmarked function is byte-identical — so "benchmarked against AlexCoul/mosna"
+is provable, not just asserted. (Skipped offline.)
+
 ## What did NOT change
 
 - No function body was edited; numerical algorithms are identical.

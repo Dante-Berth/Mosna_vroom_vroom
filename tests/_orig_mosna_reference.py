@@ -1,3 +1,18 @@
+# =============================================================================
+# ORIGINAL mosna reference (benchmark / equivalence baseline) -- DO NOT EDIT.
+#
+# Source : https://github.com/AlexCoul/mosna  (file: mosna/mosna.py)
+# Commit : 0bafb2df95a78d792813a376dbf67b8859579bb5  ("update parameters",
+#          2025-08-12) -- see benchmarks/UPSTREAM_REF.
+#
+# This is the upstream module verbatim, with ONE non-functional change: the
+# top-level `import scanorama`, `from tysserand import tysserand as ty` and
+# `from torchgmm.bayes import GaussianMixture` lines were wrapped in
+# try/except so the file imports without those optional backends. No function
+# body was touched. `tests/test_reference_matches_upstream.py` re-fetches the
+# file from GitHub at the pinned commit and asserts every benchmarked function
+# is byte-identical to upstream.
+# =============================================================================
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt

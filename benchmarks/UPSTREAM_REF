@@ -1,0 +1,8 @@
+# Pinned upstream reference for benchmarks & equivalence tests.
+# The original mosna implementation we compare against.
+REPO=https://github.com/AlexCoul/mosna
+FILE=mosna/mosna.py
+COMMIT=0bafb2df95a78d792813a376dbf67b8859579bb5
+COMMIT_SHORT=0bafb2d
+COMMIT_DATE=2025-08-12
+RAW_URL=https://raw.githubusercontent.com/AlexCoul/mosna/0bafb2df95a78d792813a376dbf67b8859579bb5/mosna/mosna.py
