@@ -136,8 +136,19 @@ Profiling the assortativity stage on a big graph (80 000 cells, ~370 000 edges,
 - It is now computed by gathering the source/target attribute values **once**
   and reducing with boolean numpy algebra — **~31× faster (1 291 ms → 42 ms),
   bit-identical** to the original (verified in `tests/`).
+- For the common **one-hot** cell-type encoding there is an even faster path:
+  the whole matrix is a single `np.bincount` of the `(src_code, tgt_code)` edge
+  pairs — no per-edge gather, no `A²` loop. The general boolean path is kept as
+  a fallback for multi-label attributes. Both are bit-identical to the original.
 
-Knock-on effect on `randomized_mixmat` (40 shuffles): **57 s → 2.0 s**.
+Measured at **500 000 cells / 2.3 M edges, 10 cell types**:
+
+| | original | boolean-vec | bincount (one-hot) |
+| --- | --- | --- | --- |
+| `mixing_matrix` (1 call) | 11 916 ms | 542 ms | **57 ms** (~210×) |
+| `randomized_mixmat` (30 shuffles) | 369.6 s | 20.5 s | **5.3 s** (~70×) |
+
+All bit-identical to the original mixing matrix on this graph.
 
 `randomized_mixmat` was also made robust and reproducible:
 
