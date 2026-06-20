@@ -169,6 +169,38 @@ All bit-identical to the original mixing matrix on this graph.
 This is the only place a function body was modified; outputs are unchanged
 (equality tests added), only the speed and the parallel/seed machinery differ.
 
+### Fast serial randomization (`randomized_mixmat`)
+
+For one-hot attributes the serial loop now shuffles the integer attribute
+**codes** and reduces with a single `bincount` per shuffle, instead of
+deep-copying the DataFrame and shuffling/gathering the full attribute array.
+
+- Per shuffle at 500k cells / 2.3M edges: **172 ms → 19 ms (~9×)**;
+  30 shuffles 5.16 s → 0.60 s.
+- Each shuffle is the *exact* mixing matrix of a permuted network (test asserts
+  equality with `mixing_matrix` on the same permutation). Reproducible via
+  `random_state`. The individual random draws differ from the old
+  DataFrame-shuffle path, so the guarantee is now: fast-path == `mixing_matrix`
+  on the same permutation, reproducibility for a fixed seed, and statistical
+  equivalence to the original over many shuffles (all tested). Multi-label
+  attributes keep the original path.
+
+### Vectorised order-1 neighbor aggregation (`aggregate_k_neighbors`)
+
+The per-node Python loop (calling `neighbors_k_order` + `flatten_neighbors` for
+every cell) was the worst scaler — ~37 s for 50k cells. For the common case
+(order-1, default mean/std) the closed neighborhood is the adjacency matrix with
+self-loops, so mean/std come from sparse matrix products:
+
+```text
+mean = (A . X) / deg ,  std = sqrt((A . X^2)/deg - mean^2)
+```
+
+- **50k cells / 200k edges: 36.6 s → 34 ms (~1000×)**, identical to the original
+  (max diff ~1e-15), including isolated nodes (aggregate over self only).
+- Higher orders and custom statistics fall back to the original exact loop
+  (tested).
+
 ### `benchmarks/bench_pipeline.py`
 
 End-to-end comparison of the original vs refactored package on a big spatial

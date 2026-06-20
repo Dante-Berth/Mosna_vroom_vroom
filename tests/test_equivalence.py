@@ -76,6 +76,56 @@ def test_transforms(orig):
     np.testing.assert_allclose(orig.renormalize(X, 0, 1), new.renormalize(X, 0, 1))
 
 
+@pytest.mark.parametrize("n,ne,nv", [(200, 600, 5), (1000, 4000, 8), (3000, 15000, 10)])
+def test_aggregate_k_neighbors_order1_vectorized(orig, n, ne, nv):
+    """The vectorised order-1 mean/std path must equal the original per-node
+    loop bit-for-bit (up to floating-point noise)."""
+    rng = np.random.default_rng(n)
+    X = rng.random((n, nv))
+    e = rng.integers(0, n, (ne, 2))
+    e = e[e[:, 0] != e[:, 1]]
+    pairs = np.unique(np.sort(e, axis=1), axis=0)
+    vn = [f"v{i}" for i in range(nv)]
+    o = orig.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
+    v = new.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
+    np.testing.assert_allclose(o[o.columns].values, v[o.columns].values,
+                               rtol=1e-9, atol=1e-9)
+
+
+def test_aggregate_k_neighbors_isolated_node(orig):
+    """A node with no edges aggregates over only itself, in both versions."""
+    rng = np.random.default_rng(0)
+    X = rng.random((5, 3))
+    pairs = np.array([[0, 1], [1, 2]])  # nodes 3, 4 isolated
+    vn = ["a", "b", "c"]
+    o = orig.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
+    v = new.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
+    np.testing.assert_allclose(o.values, v.values, rtol=1e-12, atol=1e-12)
+
+
+def test_aggregate_k_neighbors_fallback_paths(orig):
+    """order=2 and custom statistics must still match the original (loop path)."""
+    rng = np.random.default_rng(1)
+    n, nv = 300, 4
+    X = rng.random((n, nv))
+    e = rng.integers(0, n, (1200, 2))
+    e = e[e[:, 0] != e[:, 1]]
+    pairs = np.unique(np.sort(e, axis=1), axis=0)
+    vn = [f"v{i}" for i in range(nv)]
+    # higher order -> loop fallback
+    np.testing.assert_allclose(
+        orig.aggregate_k_neighbors(X, pairs, order=2, var_names=vn).values,
+        new.aggregate_k_neighbors(X, pairs, order=2, var_names=vn).values,
+        rtol=1e-9, atol=1e-9)
+    # custom stats -> loop fallback
+    np.testing.assert_allclose(
+        orig.aggregate_k_neighbors(X, pairs, order=1, var_names=vn,
+            stat_funcs=[np.mean, np.max], stat_names=['mean', 'max']).values,
+        new.aggregate_k_neighbors(X, pairs, order=1, var_names=vn,
+            stat_funcs=[np.mean, np.max], stat_names=['mean', 'max']).values,
+        rtol=1e-9, atol=1e-9)
+
+
 def test_neighbors_k_order(orig):
     nodes, edges = orig.make_high_assort_net()
     pairs = edges.values
