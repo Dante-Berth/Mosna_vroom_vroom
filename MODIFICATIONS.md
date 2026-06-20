@@ -126,6 +126,44 @@ correctness.
 
 ---
 
+## 6. Faster assortativity: vectorised `mixing_matrix` + robust parallelism
+
+Profiling the assortativity stage on a big graph (80 000 cells, ~370 000 edges,
+10 cell types) showed the bottleneck was `mixing_matrix`, not parallelism:
+
+- The original computed the matrix with `A*(A+1)/2` separate pandas `.loc`
+  fancy-indexing passes over **all** edges (≈1 300 ms per call).
+- It is now computed by gathering the source/target attribute values **once**
+  and reducing with boolean numpy algebra — **~31× faster (1 291 ms → 42 ms),
+  bit-identical** to the original (verified in `tests/`).
+
+Knock-on effect on `randomized_mixmat` (40 shuffles): **57 s → 2.0 s**.
+
+`randomized_mixmat` was also made robust and reproducible:
+
+- **Why the CPU looked idle / swap looked full earlier:** the original parallel
+  path used `dask.distributed`'s process-based `LocalCluster`, which **failed to
+  start** ("Nanny failed to start") on memory-constrained hosts, so the cores
+  were never actually used. (Swap being full was unrelated — a small 2 GiB
+  swapfile filled by idle desktop apps over a long uptime; RAM was fine.)
+- New `backend='joblib'` (loky) default for the parallel path: real
+  process parallelism, GIL-free, reliable startup. `backend='dask'` is kept for
+  compatibility and now always tears the cluster down (try/finally).
+- New `random_state` makes shuffles reproducible; with it set, **serial and
+  parallel results are bit-identical** (tested).
+- **Default changed to `parallel=False`.** Because each shuffle is now ~40 ms,
+  serial numpy beats process parallelism (whose pickling/spawn overhead exceeds
+  the compute). Parallelism is opt-in for genuinely expensive single shuffles.
+
+This is the only place a function body was modified; outputs are unchanged
+(equality tests added), only the speed and the parallel/seed machinery differ.
+
+### `benchmarks/bench_pipeline.py`
+
+End-to-end comparison of the original vs refactored package on a big spatial
+graph across three stages (assortativity, neighbor aggregation, I/O round-trip).
+Confirms compute parity where the math is shared and the I/O speedups at scale.
+
 ## What did NOT change
 
 - No function body was edited; numerical algorithms are identical.

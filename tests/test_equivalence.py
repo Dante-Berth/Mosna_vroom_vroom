@@ -89,6 +89,48 @@ def test_zscore(orig):
     np.testing.assert_allclose(orig.zscore(m, mr), new.zscore(m, mr))
 
 
+def test_mixing_matrix_vectorized_matches_original(orig):
+    """The vectorised mixing_matrix must equal the original loop bit-for-bit,
+    including on a multi-attribute graph with normalisation & double diagonal."""
+    rng = np.random.default_rng(3)
+    n, A = 2000, 6
+    coords = rng.random((n, 2))
+    onehot = np.zeros((n, A), dtype=int)
+    onehot[np.arange(n), rng.integers(0, A, n)] = 1
+    attrs = [f"t{i}" for i in range(A)]
+    nodes = pd.concat(
+        [pd.DataFrame(coords, columns=["x", "y"]),
+         pd.DataFrame(onehot, columns=attrs)], axis=1)
+    e = rng.integers(0, n, (5000, 2))
+    edges = pd.DataFrame(np.unique(e, axis=0), columns=["source", "target"])
+    for norm in (True, False):
+        for dd in (True, False):
+            np.testing.assert_array_equal(
+                orig.mixing_matrix(nodes, edges, attrs, normalized=norm, double_diag=dd),
+                new.mixing_matrix(nodes, edges, attrs, normalized=norm, double_diag=dd),
+            )
+
+
+def test_randomized_mixmat_serial_equals_parallel():
+    """With a fixed random_state, serial and joblib backends are identical."""
+    rng = np.random.default_rng(4)
+    n, A = 1500, 5
+    onehot = np.zeros((n, A), dtype=int)
+    onehot[np.arange(n), rng.integers(0, A, n)] = 1
+    attrs = [f"t{i}" for i in range(A)]
+    nodes = pd.DataFrame(onehot, columns=attrs)
+    e = rng.integers(0, n, (4000, 2))
+    edges = pd.DataFrame(np.unique(e, axis=0), columns=["source", "target"])
+
+    mm_s, ac_s = new.randomized_mixmat(
+        nodes, edges, attrs, n_shuffle=8, parallel=False, verbose=0, random_state=7)
+    mm_p, ac_p = new.randomized_mixmat(
+        nodes, edges, attrs, n_shuffle=8, parallel=2, backend="joblib",
+        verbose=0, random_state=7)
+    np.testing.assert_array_equal(mm_s, mm_p)
+    np.testing.assert_array_equal(ac_s, ac_p)
+
+
 # ---- package-internal sanity (run even without the original reference) ----
 
 def test_flat_and_themed_api_present():
