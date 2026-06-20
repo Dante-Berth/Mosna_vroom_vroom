@@ -1,5 +1,7 @@
 # MOSNA — Multi‑Omics Spatial Network Analysis (`vroom vroom` edition 🏎️)
 
+[![tests](https://github.com/Dante-Berth/Mosna_vroom_vroom/actions/workflows/tests.yml/badge.svg)](https://github.com/Dante-Berth/Mosna_vroom_vroom/actions/workflows/tests.yml)
+
 **`mosna`** is a Python package for **spatial omics data analysis**: it extracts
 clinically relevant features from single-cell spatial measurements
 (transcriptomics, proteomics, multiplexed imaging). It reconstructs spatial
@@ -78,7 +80,11 @@ Backward compatibility is preserved: `import mosna`, `from mosna import <fn>`,
 │   ├── plotting.py         # visualisation helpers
 │   ├── screening.py        # parameter screening for niche detection
 │   └── mosna.py            # legacy shim (re-exports everything)
-├── benchmarks/bench_io.py  # pandas vs Polars/Parquet I/O benchmark
+├── benchmarks/
+│   ├── bench_io.py         # pandas vs Polars/Parquet I/O benchmark
+│   ├── bench_compute.py    # per-kernel compute speedups vs original (+ correctness)
+│   └── bench_pipeline.py   # end-to-end original vs refactored on a big graph
+├── .github/workflows/tests.yml  # CI: pytest on 3.10/3.11 + benchmark smoke
 ├── tests/                  # equivalence + API tests
 ├── examples/               # original example notebooks
 ├── pyproject.toml          # uv / PEP 621 project
@@ -162,6 +168,34 @@ The equivalence suite imports the original monolithic implementation alongside
 the refactored package and asserts identical outputs on the test networks and a
 battery of pure functions (mixing matrices, assortativity, transforms,
 neighbor statistics, z-scores, …).
+
+### Compute speedups (vs original, with correctness gate)
+
+`benchmarks/bench_compute.py` times the optimised kernels against the original
+and prints an `[OK]`/`[MISMATCH!]` flag per kernel:
+
+```bash
+python benchmarks/bench_compute.py --cells 100000 --attributes 10
+```
+
+Representative output (100k cells / ~460k edges):
+
+```text
+1. mixing_matrix           original= 1725.5 ms   new=    6.7 ms   speedup= 258x   [OK]
+2. randomized_mixmat(x20)  original=36341.9 ms   new=   73.5 ms   speedup= 495x   [OK]
+3. aggregate_k_neighbors   original= 2181.1 ms   new=    9.0 ms   speedup= 243x   [OK]
+```
+
+These are **per-kernel** speedups for the common one-hot / order-1 / default-stat
+cases (the heavy assortativity and neighbor-feature steps); the rest of the
+pipeline is unchanged and runs at the same speed. See [MODIFICATIONS.md](MODIFICATIONS.md).
+
+### Continuous integration
+
+GitHub Actions ([.github/workflows/tests.yml](.github/workflows/tests.yml)) runs
+the test suite on Python 3.10 and 3.11 for every push and PR to `main`, plus a
+small benchmark smoke job that asserts the optimised kernels still match the
+original.
 
 ---
 
