@@ -93,7 +93,7 @@ def neighbors_k_order(pairs, n, order):
         if len(k_neigh) > 0:
             k_unique_neigh = np.unique(np.concatenate(k_neigh, axis=0))
             # select the kth order neighbors that have never been detected in previous orders
-            keep_neigh = np.in1d(k_unique_neigh, unique_neigh, invert=True)
+            keep_neigh = np.isin(k_unique_neigh, unique_neigh, invert=True)  # np.in1d removed in NumPy 2.0
             k_unique_neigh = k_unique_neigh[keep_neigh]
             # register the kth order unique neighbors along with their order
             all_neigh.append([k_unique_neigh, k+1])

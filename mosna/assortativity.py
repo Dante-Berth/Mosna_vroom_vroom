@@ -478,8 +478,8 @@ def select_pairs_from_coords(coords_ids, pairs, how='inner', return_selector=Fal
            [7, 8]])
     """
     
-    select_source = np.in1d(pairs[:, 0], coords_ids)
-    select_target = np.in1d(pairs[:, 1], coords_ids)
+    select_source = np.isin(pairs[:, 0], coords_ids)  # np.in1d removed in NumPy 2.0
+    select_target = np.isin(pairs[:, 1], coords_ids)
     if how == 'inner':
         select = np.logical_and(select_source, select_target)
     elif how == 'outer':

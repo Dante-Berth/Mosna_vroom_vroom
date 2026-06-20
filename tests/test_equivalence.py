@@ -98,35 +98,64 @@ def test_transforms(orig):
     np.testing.assert_allclose(orig.renormalize(X, 0, 1), new.renormalize(X, 0, 1))
 
 
+def _ref_order1_mean_std(X, pairs):
+    """Self-contained reference for order-1 closed-neighborhood mean/std, used
+    so correctness is checked even where the original baseline can't run
+    (the upstream code uses np.in1d, removed in NumPy 2.0). For each node i,
+    aggregate over {i} + direct neighbors."""
+    n = X.shape[0]
+    p = pairs[:, :2].astype(int)
+    adj = [set([i]) for i in range(n)]
+    for a, b in p:
+        adj[a].add(b)
+        adj[b].add(a)
+    means, stds = [], []
+    for i in range(n):
+        idx = np.array(sorted(adj[i]))
+        means.append(X[idx].mean(0))
+        stds.append(X[idx].std(0))
+    return np.hstack([np.array(means), np.array(stds)])
+
+
 @pytest.mark.parametrize("n,ne,nv", [(200, 600, 5), (1000, 4000, 8), (3000, 15000, 10)])
 def test_aggregate_k_neighbors_order1_vectorized(orig, n, ne, nv):
     """The vectorised order-1 mean/std path must equal the original per-node
-    loop bit-for-bit (up to floating-point noise)."""
+    loop (when the baseline can run) and an independent reference (always)."""
     rng = np.random.default_rng(n)
     X = rng.random((n, nv))
     e = rng.integers(0, n, (ne, 2))
     e = e[e[:, 0] != e[:, 1]]
     pairs = np.unique(np.sort(e, axis=1), axis=0)
     vn = [f"v{i}" for i in range(nv)]
-    o = orig.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
     v = new.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
-    np.testing.assert_allclose(o[o.columns].values, v[o.columns].values,
+    # always: independent reference (NumPy-version independent)
+    np.testing.assert_allclose(v.values, _ref_order1_mean_std(X, pairs),
                                rtol=1e-9, atol=1e-9)
+    # when available: the original implementation itself
+    o = _orig_call_or_none(orig.aggregate_k_neighbors, X, pairs, order=1, var_names=vn)
+    if o is not None:
+        np.testing.assert_allclose(o[o.columns].values, v[o.columns].values,
+                                   rtol=1e-9, atol=1e-9)
 
 
 def test_aggregate_k_neighbors_isolated_node(orig):
-    """A node with no edges aggregates over only itself, in both versions."""
+    """A node with no edges aggregates over only itself."""
     rng = np.random.default_rng(0)
     X = rng.random((5, 3))
     pairs = np.array([[0, 1], [1, 2]])  # nodes 3, 4 isolated
     vn = ["a", "b", "c"]
-    o = orig.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
     v = new.aggregate_k_neighbors(X, pairs, order=1, var_names=vn)
-    np.testing.assert_allclose(o.values, v.values, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(v.values, _ref_order1_mean_std(X, pairs),
+                               rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(v.values[4, :3], X[4], atol=1e-12)  # isolated -> self
+    o = _orig_call_or_none(orig.aggregate_k_neighbors, X, pairs, order=1, var_names=vn)
+    if o is not None:
+        np.testing.assert_allclose(o.values, v.values, rtol=1e-12, atol=1e-12)
 
 
 def test_aggregate_k_neighbors_fallback_paths(orig):
-    """order=2 and custom statistics must still match the original (loop path)."""
+    """order=2 and custom statistics must match the original loop path when the
+    baseline can run (uses np.in1d -> skipped on NumPy >= 2.0)."""
     rng = np.random.default_rng(1)
     n, nv = 300, 4
     X = rng.random((n, nv))
@@ -134,16 +163,17 @@ def test_aggregate_k_neighbors_fallback_paths(orig):
     e = e[e[:, 0] != e[:, 1]]
     pairs = np.unique(np.sort(e, axis=1), axis=0)
     vn = [f"v{i}" for i in range(nv)]
-    # higher order -> loop fallback
+
+    o2 = _orig_call_or_none(orig.aggregate_k_neighbors, X, pairs, order=2, var_names=vn)
+    oc = _orig_call_or_none(orig.aggregate_k_neighbors, X, pairs, order=1, var_names=vn,
+                            stat_funcs=[np.mean, np.max], stat_names=['mean', 'max'])
+    if o2 is None or oc is None:
+        pytest.skip("original neighbor aggregation uses np.in1d (removed in NumPy 2.0)")
     np.testing.assert_allclose(
-        orig.aggregate_k_neighbors(X, pairs, order=2, var_names=vn).values,
-        new.aggregate_k_neighbors(X, pairs, order=2, var_names=vn).values,
+        o2.values, new.aggregate_k_neighbors(X, pairs, order=2, var_names=vn).values,
         rtol=1e-9, atol=1e-9)
-    # custom stats -> loop fallback
     np.testing.assert_allclose(
-        orig.aggregate_k_neighbors(X, pairs, order=1, var_names=vn,
-            stat_funcs=[np.mean, np.max], stat_names=['mean', 'max']).values,
-        new.aggregate_k_neighbors(X, pairs, order=1, var_names=vn,
+        oc.values, new.aggregate_k_neighbors(X, pairs, order=1, var_names=vn,
             stat_funcs=[np.mean, np.max], stat_names=['mean', 'max']).values,
         rtol=1e-9, atol=1e-9)
 
@@ -151,8 +181,10 @@ def test_aggregate_k_neighbors_fallback_paths(orig):
 def test_neighbors_k_order(orig):
     nodes, edges = orig.make_high_assort_net()
     pairs = edges.values
-    assert repr(orig.neighbors_k_order(pairs, 0, 2)) == \
-           repr(new.neighbors_k_order(pairs, 0, 2))
+    o = _orig_call_or_none(orig.neighbors_k_order, pairs, 0, 2)
+    if o is None:
+        pytest.skip("original neighbors_k_order uses np.in1d (removed in NumPy 2.0)")
+    assert repr(o) == repr(new.neighbors_k_order(pairs, 0, 2))
 
 
 def test_attribute_ac_numpy2_safe():
