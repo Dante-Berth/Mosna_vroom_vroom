@@ -6,6 +6,9 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.10"
+  # nbsphinx renders the example notebooks via pandoc (a system package).
+  apt_packages:
+    - pandoc
 
 sphinx:
   configuration: docs/source/conf.py
