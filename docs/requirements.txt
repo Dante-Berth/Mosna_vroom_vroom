@@ -1,7 +1,0 @@
-sphinx==7.4.7
-sphinx-rtd-theme==2.0.0
-nbsphinx==0.9.5
-myst-parser==4.0.0
-# Provides the ``ipython3`` Pygments lexer the example notebooks declare,
-# avoiding "unknown lexer" warnings (which fail the build under fail_on_warning).
-IPython==8.26.0

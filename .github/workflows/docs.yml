@@ -26,21 +26,16 @@ jobs:
         with:
           python-version: "3.10"
 
-      # nbsphinx converts the example notebooks via pandoc (a system package).
-      - name: Install pandoc
-        run: sudo apt-get update && sudo apt-get install -y pandoc
-
       - name: Install dependencies
         run: |
-          pip install -r docs/requirements.txt
           pip install -e ".[docs]"
 
-      - name: Build HTML (warnings = errors, matching Read the Docs)
-        run: sphinx-build -b html -W docs/source docs/_build/html
+      - name: Build site
+        run: mkdocs build
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_build/html
+          path: site
 
   deploy:
     needs: build
