@@ -33,8 +33,12 @@ def make_features_STAGATE(
     feats : dataframe
         Features computed with the STAGATE method.
     """
-    # code here
-    pass
+    # Not yet implemented — fail loudly rather than silently returning None
+    # (which would propagate a confusing error far from the call site).
+    raise NotImplementedError(
+        "make_features_STAGATE is not implemented yet. "
+        "Use make_features_SCANIT or make_features_NAS instead."
+    )
 
 
 def make_features_SCANIT(

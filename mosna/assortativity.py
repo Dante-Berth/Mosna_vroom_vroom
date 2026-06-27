@@ -670,20 +670,15 @@ def batch_assort_mixmat(nodes, edges, attributes, groups, n_shuffle=50,
             groups_data.append(group_data)
         networks_stats = pd.concat(groups_data, axis=0)
     else:
-        from multiprocessing import cpu_count
         from dask.distributed import Client, LocalCluster
         from dask import delayed
-        
-        # select the right number of cores
-        nb_cores = cpu_count()
-        if isinstance(parallel_groups, int):
-            use_cores = min(parallel_groups, nb_cores)
-        elif parallel_groups == 'max-1':
-            use_cores = nb_cores - 1
-        elif parallel_groups == 'max':
-            use_cores = nb_cores
+
+        # select the right number of cores (same int/'max'/'max-1' mapping as the
+        # original; see _resolve_n_cores). Worker count affects scheduling only,
+        # not the numerical result: each shuffle is seeded independently.
+        use_cores = _resolve_n_cores(parallel_groups)
         # set up cluster and workers
-        cluster = LocalCluster(n_workers=use_cores, 
+        cluster = LocalCluster(n_workers=use_cores,
                                threads_per_worker=1,
                                memory_limit=memory_limit)
         client = Client(cluster)
@@ -874,19 +869,14 @@ def groups_assort_mixmat(
             groups_data.append(group_data)
         networks_stats = pd.concat(groups_data, axis=0)
     else:
-        from multiprocessing import cpu_count
         from dask.distributed import Client, LocalCluster
         from dask import delayed
         from dask.diagnostics import ProgressBar
-        
-        # select the right number of cores
-        nb_cores = cpu_count()
-        if isinstance(parallel_groups, int):
-            use_cores = min(parallel_groups, nb_cores)
-        elif parallel_groups == 'max-1':
-            use_cores = nb_cores - 1
-        elif parallel_groups == 'max':
-            use_cores = nb_cores
+
+        # select the right number of cores (same int/'max'/'max-1' mapping as the
+        # original; see _resolve_n_cores). Worker count affects scheduling only,
+        # not the numerical result: each shuffle is seeded independently.
+        use_cores = _resolve_n_cores(parallel_groups)
         if memory_limit == 'max':
             total_memory, used_memory, free_memory = map(
                 int, os.popen('free -t -m').readlines()[-1].split()[1:])

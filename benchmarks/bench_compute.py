@@ -93,7 +93,10 @@ def safe_timeit(fn, repeats):
 def report(name, t_orig, t_new, identical):
     flag = "OK" if identical else "MISMATCH!"
     if t_orig is None:
-        print(f"{name:<26} original=     n/a      new={t_new*1e3:9.1f} ms")
+        # No baseline to compare against, but still surface a correctness
+        # mismatch if the caller detected one some other way.
+        suffix = "" if identical else f"   [{flag}]"
+        print(f"{name:<26} original=     n/a      new={t_new*1e3:9.1f} ms{suffix}")
     else:
         sp = t_orig / t_new if t_new else float("inf")
         print(f"{name:<26} original={t_orig*1e3:9.1f} ms   "
@@ -137,7 +140,8 @@ def main():
             identical = np.array_equal(mm_orig, mm_new)
     report("1. mixing_matrix", t_orig, t_new, identical)
 
-    # 2. randomized_mixmat (serial)
+    # 2. randomized_mixmat (serial) — run once, not `r` times: it does
+    # `n_shuffle` passes internally and is the slowest kernel here.
     ns = args.n_shuffle
     t_new2, _ = timeit(lambda: new.randomized_mixmat(
         nodes, edges, attrs, n_shuffle=ns, parallel=False, verbose=0,
@@ -149,7 +153,7 @@ def main():
             nodes, edges, attrs, n_shuffle=ns, parallel=False, verbose=0), 1)
     report(f"2. randomized_mixmat(x{ns})", t_orig2, t_new2, ident2)
 
-    # 3. aggregate_k_neighbors (order 1)
+    # 3. aggregate_k_neighbors (order 1) — also run once: heavy sparse products.
     sub = min(args.nas_cells, args.cells)
     es = edges[(edges["source"] < sub) & (edges["target"] < sub)].values
     X = nodes[marker_cols].values[:sub]

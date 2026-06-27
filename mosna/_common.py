@@ -32,6 +32,7 @@ from multiprocessing import cpu_count
 import numpy as np
 import pandas as pd
 import joblib
+from tqdm import tqdm
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
